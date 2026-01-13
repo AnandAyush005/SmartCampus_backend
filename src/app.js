@@ -16,12 +16,15 @@ app.use(cookieParser())
 // routes import
 import userRouter from "./routes/user.routes.js"
 import noticeRoutes from "./routes/notice.routes.js"
-import issueRoutes from "./routes/issue.route.js";
+import issueRoutes from "./routes/issue.routes.js";
+import lostFoundRoutes from './routes/lostFound.routes.js';
+
 
 
 // routes declaration
 app.use("/api/v1/users", userRouter)
 app.use("/api/v1/notices", noticeRoutes)
 app.use('/api/v1/issues', issueRoutes);
+app.use('/api/lost-found', lostFoundRoutes);
 
 export { app }
