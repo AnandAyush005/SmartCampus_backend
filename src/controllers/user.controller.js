@@ -1,6 +1,8 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {ApiError} from "../utils/ApiError.js"
 import { User } from "../models/user.model.js"
+import { Issue } from "../models/issue.model.js"
+import { Notice } from "../models/notice.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { registerUserSchema, loginUserSchema, updateUserSchema, changePasswordSchema } from "../middlewares/validates/user.middleware.js";
@@ -71,13 +73,8 @@ const loginUser = asyncHandler(async (req, res) => {
     }
 
     // 🆕 3. VERIFICATION CHECK - Only verified users can login
-    if (!user.isVerified) {
+    if (user.role != "admin" && !user.isVerified) {
         throw new ApiError(403, "You are not verified by the admin");
-    }
-
-    // 4. Account active check
-    if (!user.isActive) {
-        throw new ApiError(403, "Account is deactivated. Contact admin");
     }
 
     // 5. Verify password
@@ -263,7 +260,7 @@ const updateUserAvatar = asyncHandler(async(req,res)=>{
 })
 
 // controllers/user.controller.js
-export const getFacultyList = asyncHandler(async (req, res) => {
+const getFacultyList = asyncHandler(async (req, res) => {
     if (!['admin', 'faculty'].includes(req.user.role)) {
         throw new ApiError(403, "Only admin/faculty can view faculty list");
     }
@@ -291,13 +288,13 @@ export const getFacultyList = asyncHandler(async (req, res) => {
 });
 
 // 2. GET ALL USERS (Admin dashboard)
-export const getAllUsers = asyncHandler(async (req, res) => {
-    if (req.user.role !== 'admin') {
-        throw new ApiError(403, "Only admin can view all users");
+const getAllUsers = asyncHandler(async (req, res) => {
+    if (req.user.role === 'student') {
+        throw new ApiError(403, "Only admin/faculty can view all users");
     }
 
-    const { role, search, page = 1, limit = 20 } = req.query;
-    const query = { isActive: true };
+    const { role, search, page = 1, limit = 20 } = req.query; // ✅ Changed to query
+    const query = { isActive: true }; // ✅ Added missing query
 
     if (role && role !== 'all') query.role = role;
     if (search) {
@@ -321,24 +318,25 @@ export const getAllUsers = asyncHandler(async (req, res) => {
     );
 });
 
+
 // 3. ADMIN/FACULTY DASHBOARD STATS
-export const adminDashboardStats = asyncHandler(async (req, res) => {
+const adminDashboardStats = asyncHandler(async (req, res) => {
     if (!['admin', 'faculty'].includes(req.user.role)) {
         throw new ApiError(403, "Admin/Faculty access only");
     }
 
     const stats = await Promise.all([
-        User.countDocuments({ role: 'student', isActive: true }),
-        User.countDocuments({ role: 'faculty', isActive: true }),
+        User.countDocuments({ role: 'student', isVerified: true }), // ✅ Verified students
+        User.countDocuments({ role: 'faculty', isVerified: true }),
         Issue.countDocuments({ status: 'open' }),
         Issue.countDocuments({ status: 'in-progress' }),
-        Notice.countDocuments({ status: 'active' })
+        Notice.countDocuments({ isPinned: true || { status: 'active' } }) // ✅ Flexible
     ]);
 
     return res.status(200).json(
         new ApiResponse(200, {
-            students: stats[0],
-            faculty: stats[1],
+            verifiedStudents: stats[0],
+            verifiedFaculty: stats[1],
             openIssues: stats[2],
             inProgressIssues: stats[3],
             activeNotices: stats[4]
@@ -346,13 +344,13 @@ export const adminDashboardStats = asyncHandler(async (req, res) => {
     );
 });
 
-// 4. FACULTY ASSIGNED ISSUES (Faculty dashboard)
-export const getFacultyAssignedIssues = asyncHandler(async (req, res) => {
+
+const getFacultyAssignedIssues = asyncHandler(async (req, res) => {
     if (req.user.role !== 'faculty') {
         throw new ApiError(403, "Faculty access only");
     }
 
-    const issues = await Issue.find({ assignedTo: req.user._id })
+    const issues = await Issue.find({ assignedTo: req.user._id }) // ✅ Use _id not email
         .populate('raisedBy', 'fullName registrationNumber')
         .sort({ createdAt: -1 });
 
@@ -361,38 +359,137 @@ export const getFacultyAssignedIssues = asyncHandler(async (req, res) => {
     );
 });
 
-// 5. UPDATE USER STATUS (Admin only)
-export const updateUserStatus = asyncHandler(async (req, res) => {
+
+
+const getPendingVerifications = asyncHandler(async (req, res) => {
+    if (!['admin', 'faculty'].includes(req.user.role)) {
+        throw new ApiError(403, "Admin/Faculty access only");
+    }
+
+    // Faculty sees only students, Admin sees both
+    const roleFilter = req.user.role === 'faculty' ? 'student' : { $in: ['student', 'faculty'] };
+    
+    const pendingUsers = await User.find({
+        isVerified: false,
+        role: roleFilter
+    })
+    .select('fullName email registrationNumber role createdAt _id')
+    .sort({ createdAt: -1 });
+
+    return res.status(200).json(
+        new ApiResponse(200, pendingUsers, "Pending verifications fetched")
+    );
+});
+
+// ✅ FIXED adminVerifyUser - Use email correctly
+const adminVerifyUser = asyncHandler(async (req, res) => {
     if (req.user.role !== 'admin') {
         throw new ApiError(403, "Admin only");
     }
 
-    const { status } = req.body;
-    const user = await User.findById(req.params.id);
+    const { email } = req.body; // ✅ From body, not params
+    if (!email?.trim()) {
+        throw new ApiError(400, "Email required");
+    }
 
+    const user = await User.findOne({ email: email.trim() });
     if (!user) {
         throw new ApiError(404, "User not found");
     }
 
-    user.isActive = status === 'active';
+    if (user.isVerified) {
+        throw new ApiError(400, "User already verified");
+    }
+
+    user.isVerified = true;
     await user.save();
 
-    const updatedUser = await User.findById(user._id)
-        .select('fullName email role isActive');
+    const verifiedUser = await User.findById(user._id)
+        .select('fullName email role registrationNumber isVerified');
 
     return res.status(200).json(
-        new ApiResponse(200, updatedUser, "User status updated")
+        new ApiResponse(200, verifiedUser, "User verified successfully")
+    );
+});
+
+// ✅ FIXED facultyVerifyStudent
+const facultyVerifyStudent = asyncHandler(async (req, res) => {
+    if (req.user.role !== 'faculty') {
+        throw new ApiError(403, "Faculty only");
+    }
+
+    const { email } = req.body;
+    if (!email?.trim()) {
+        throw new ApiError(400, "Email required");
+    }
+
+    const user = await User.findOne({ email: email.trim() }); // ✅ Fixed findOne
+    if (!user) {
+        throw new ApiError(404, "Student not found");
+    }
+
+    if (user.role !== 'student') {
+        throw new ApiError(403, "Faculty can only verify students");
+    }
+
+    if (user.isVerified) {
+        throw new ApiError(400, "Student already verified");
+    }
+
+    user.isVerified = true;
+    await user.save();
+
+    const verifiedStudent = await User.findById(user._id)
+        .select('fullName email registrationNumber isVerified');
+
+    return res.status(200).json(
+        new ApiResponse(200, verifiedStudent, "Student verified successfully")
     );
 });
 
 
-export { 
+// 4. GET VERIFICATION HISTORY (Admin dashboard)
+const getVerificationHistory = asyncHandler(async (req, res) => {
+    if (!['admin', 'faculty'].includes(req.user.role)) {
+        throw new ApiError(403, "Admin/Faculty access only");
+    }
 
+    const { role, limit = 20, page = 1 } = req.query;
+    const query = { isVerified: true };
+
+    if (role) query.role = role;
+
+    const verifiedUsers = await User.find(query)
+        .select('fullName email role registrationNumber isVerified createdAt updatedAt')
+        .sort({ updatedAt: -1 })
+        .limit(parseInt(limit))
+        .skip((parseInt(page) - 1) * parseInt(limit));
+
+    const total = await User.countDocuments(query);
+
+    return res.status(200).json(
+        new ApiResponse(200, { 
+            verifiedUsers, 
+            total,
+            pages: Math.ceil(total / limit) 
+        }, "Verification history")
+    );
+});
+
+
+export {
     registerUser,
     loginUser,
     logoutUser,
     updateAccountDetails,
     changeCurrentPassword,
     updateUserAvatar,
-
+    getFacultyList,
+    getAllUsers,
+    adminDashboardStats,
+    getFacultyAssignedIssues,
+    getPendingVerifications,
+    adminVerifyUser,
+    facultyVerifyStudent,
+    getVerificationHistory
 };

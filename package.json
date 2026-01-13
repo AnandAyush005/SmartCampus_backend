@@ -1,7 +1,7 @@
 {
-  "name": "VideoTube",
+  "name": "smartCapmpus",
   "version": "1.0.0",
-  "description": "a backend in chai aur code",
+  "description": "",
   "main": "index.js",
   "type": "module",
   "scripts": {
