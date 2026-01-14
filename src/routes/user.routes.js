@@ -1,48 +1,97 @@
 import { Router } from "express";
-import { changeCurrentPassword, loginUser, logoutUser, registerUser, updateAccountDetails, updateUserAvatar, getFacultyList, getAllUsers, adminDashboardStats, getFacultyAssignedIssues, getPendingVerifications, adminVerifyUser, facultyVerifyStudent, getVerificationHistory } from "../controllers/user.controller.js";
-import { uploadImage } from "../middlewares/multer.middleware.js"
+import {
+  changeCurrentPassword,
+  loginUser,
+  logoutUser,
+  registerUser,
+  updateAccountDetails,
+  updateUserAvatar,
+  getFacultyList,
+  getAllUsers,
+  adminDashboardStats,
+  getFacultyAssignedIssues,
+  getPendingVerifications,
+  adminVerifyUser,
+  facultyVerifyStudent,
+  getVerificationHistory,
+  getCurrentUser,
+} from "../controllers/user.controller.js";
+
+import { uploadImage } from "../middlewares/multer.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
+/* ===================== PUBLIC ROUTES ===================== */
+
 router.route("/register").post(
-    uploadImage.fields(
-        [
-            {
-                name : "avatar",
-                maxCount : 1
-            },
-        ]
-    ),
+  uploadImage.fields([
+    {
+      name: "avatar",
+      maxCount: 1,
+    },
+  ]),
+  registerUser
+);
 
-    registerUser)
+router.route("/login").post(loginUser);
 
+/* ===================== SECURED ROUTES ===================== */
 
-router.route("/login").post(loginUser)
+router.route("/me").get(verifyJWT, getCurrentUser);
 
-// secured routes
 router.route("/update-details").put(verifyJWT, updateAccountDetails);
+
 router.route("/change-password").put(verifyJWT, changeCurrentPassword);
+
 router.route("/logout").post(verifyJWT, logoutUser);
 
-router.get('/faculty', verifyJWT, getFacultyList);
-router.get("/all-users", verifyJWT, getAllUsers);
-router.get("/admin-dashboard-stats", verifyJWT, adminDashboardStats);
-router.get("/get-faculty-assgined-issue", verifyJWT, getFacultyAssignedIssues);
+/* ===================== USER / FACULTY ===================== */
 
-router.put(
-  "/update-avatar",
-  verifyJWT,               
-  uploadImage.single("avatar"),  
+router.route("/faculty").get(verifyJWT, getFacultyList);
+
+router.route("/faculty/assigned-issues").get(
+  verifyJWT,
+  getFacultyAssignedIssues
+);
+
+/* ===================== ADMIN ===================== */
+
+router.route("/all-users").get(verifyJWT, getAllUsers);
+
+router.route("/admin-dashboard-stats").get(
+  verifyJWT,
+  adminDashboardStats
+);
+
+/* ===================== PROFILE ===================== */
+
+router.route("/update-avatar").put(
+  verifyJWT,
+  uploadImage.single("avatar"),
   updateUserAvatar
 );
 
-// 🔐 VERIFICATION ROUTES
-router.get('/pending-verifications', verifyJWT, getPendingVerifications);     // Admin/Faculty dashboard
-router.put('/admin-verify', verifyJWT, adminVerifyUser);               // Admin verifies anyone
-router.put('/faculty/verify-student', verifyJWT, facultyVerifyStudent); // Faculty verifies students
-router.get('/verification-history', verifyJWT, getVerificationHistory);       // Verification logs
+/* ===================== VERIFICATION ===================== */
 
+router.route("/pending-verifications").get(
+  verifyJWT,
+  getPendingVerifications
+);
 
+router.route("/admin/verify").put(
+  verifyJWT,
+  adminVerifyUser
+);
+
+router.route("/faculty/verify-student").put(
+  verifyJWT,
+  facultyVerifyStudent
+);
+
+router.route("/verification-history").get(
+  verifyJWT,
+  getVerificationHistory
+);
 
 export default router;

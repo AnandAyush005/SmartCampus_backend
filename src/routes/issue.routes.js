@@ -1,29 +1,50 @@
-import { Router } from 'express';
-import { 
-    createIssue, 
-    getAllIssues, 
-    getMyIssues, 
-    updateIssueStatus,
-    assignIssue 
-} from '../controllers/issue.controller.js';
-import { verifyJWT } from '../middlewares/auth.middleware.js';
-import { uploadImage } from '../middlewares/multer.middleware.js';
+import { Router } from "express";
+import {
+  createIssue,
+  getAllIssues,
+  getMyIssues,
+  updateIssueStatus,
+  assignIssue,
+} from "../controllers/issue.controller.js";
+
+import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { uploadImage } from "../middlewares/multer.middleware.js";
 
 const router = Router();
 
-// 🆕 Students report issues (images upload)
-router.post('/', verifyJWT, uploadImage.array('images', 5), createIssue);
+/* ===================== ISSUES ===================== */
 
-// 📋 All issues (public for students, full for admins)
-router.get('/', verifyJWT, getAllIssues);
+// 🆕 Create issue (students)
+router.route("/")
+  .post(
+    verifyJWT,
+    uploadImage.array("images", 5),
+    createIssue
+  )
+  .get(
+    verifyJWT,
+    getAllIssues
+  );
 
-// 👤 My issues (student sees own, admin sees all)
-router.get('/my-issues', verifyJWT, getMyIssues);
+// 👤 My issues
+router.route("/my")
+  .get(
+    verifyJWT,
+    getMyIssues
+  );
 
-// 🔧 Admin assigns issue to faculty
-router.put('/:id/assign', verifyJWT, assignIssue);
+// 🔧 Assign issue to faculty (admin)
+router.route("/:id/assign")
+  .put(
+    verifyJWT,
+    assignIssue
+  );
 
-// ✅ Admin/faculty updates status
-router.put('/:id/status', verifyJWT, updateIssueStatus);
+// ✅ Update issue status (admin / faculty)
+router.route("/:id/status")
+  .put(
+    verifyJWT,
+    updateIssueStatus
+  );
 
 export default router;

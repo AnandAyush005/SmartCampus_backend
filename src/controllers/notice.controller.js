@@ -86,32 +86,46 @@ export const getNoticeById = asyncHandler(async (req, res) => {
 });
 
 export const updateNotice = asyncHandler(async (req, res) => {
-    const notice = await Notice.findById(req.params.id);
-    if (!notice) {
-        throw new ApiError(404, "Notice not found");
-    }
+  const notice = await Notice.findById(req.params.id);
+  if (!notice) throw new ApiError(404, "Notice not found");
 
-    // Author or admin only
-    if (notice.author.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-        throw new ApiError(403, "Not authorized");
-    }
+  const isAdmin = req.user.role === "admin";
+  const isFaculty = req.user.role === "faculty";
+  const isAuthor = notice.author.toString() === req.user._id.toString();
 
-    // Update fields
-    if (req.body.title) notice.title = req.body.title.trim();
-    if (req.body.content) notice.content = req.body.content.trim();
-    if (req.body.category) notice.category = req.body.category;
-    if (req.body.eventDate) notice.eventDate = new Date(req.body.eventDate);
-    if (req.body.isPinned !== undefined) notice.isPinned = req.body.isPinned === 'true';
+  if (!isAdmin && !isFaculty && !isAuthor) {
+    throw new ApiError(403, "Not authorized");
+  }
 
-    await notice.save();
+  const { title, content, category, eventDate, isPinned } = req.body;
 
-    const updatedNotice = await Notice.findById(notice._id)
-        .populate('author', 'fullName role');
+  if (title) notice.title = title.trim();
+  if (content) notice.content = content.trim();
+  if (category) notice.category = category;
+  if (eventDate) notice.eventDate = new Date(eventDate);
 
-    return res.status(200).json(
-        new ApiResponse(200, updatedNotice, "Notice updated")
-    );
+  // 🔒 Faculty restrictions
+  if (isFaculty && !isAdmin) {
+    notice.isPinned = false;               // faculty can't pin
+    notice.status = "pending_approval";    // admin must approve
+    notice.editedByFaculty = true;
+  }
+
+  // ✅ Admin has full power
+  if (isAdmin) {
+    if (typeof isPinned === "boolean") notice.isPinned = isPinned;
+    notice.status = "published";
+    notice.editedByFaculty = false;
+  }
+
+  await notice.save();
+
+  return res.status(200).json(
+    new ApiResponse(200, notice, "Notice updated successfully")
+  );
 });
+
+
 
 export const deleteNotice = asyncHandler(async (req, res) => {
     const notice = await Notice.findById(req.params.id);
@@ -119,7 +133,7 @@ export const deleteNotice = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Notice not found");
     }
 
-    if (notice.author.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    if (notice.author.toString() !== req.user._id.toString() &&  !["admin", "faculty"].includes(req.user.role)) {
         throw new ApiError(403, "Not authorized");
     }
 

@@ -1,29 +1,50 @@
-import { Router } from 'express';
-import { 
-    createLostFound, 
-    getAllLostFound, 
-    getMyLostFound, 
-    adminApproveLostFound,
-    claimLostFound 
-} from '../controllers/lostFound.controller.js';
-import { verifyJWT } from '../middlewares/auth.middleware.js';
-import { uploadImage } from '../middlewares/multer.middleware.js';
+import { Router } from "express";
+import {
+  createLostFound,
+  getAllLostFound,
+  getMyLostFound,
+  adminApproveLostFound,
+  claimLostFound,
+} from "../controllers/lostFound.controller.js";
+
+import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { uploadImage } from "../middlewares/multer.middleware.js";
 
 const router = Router();
 
-// 📱 Students post lost/found items
-router.post('/', verifyJWT, uploadImage.array('images', 5), createLostFound);
+/* ===================== LOST & FOUND ===================== */
 
-// 👀 View all approved items (public for students)
-router.get('/', verifyJWT, getAllLostFound);
+// 📱 Create lost/found post (students)
+router.route("/")
+  .post(
+    verifyJWT,
+    uploadImage.array("images", 5),
+    createLostFound
+  )
+  .get(
+    verifyJWT,   // authenticated students
+    getAllLostFound
+  );
 
-// 📋 My posts (only own items)
-router.get('/my-posts', verifyJWT, getMyLostFound);
+// 📋 My posts (own items)
+router.route("/my-posts")
+  .get(
+    verifyJWT,
+    getMyLostFound
+  );
 
-// 👨‍💼 Admin approves/rejects
-router.patch('/:id/approve', verifyJWT, adminApproveLostFound);
+// 👨‍💼 Admin approves/rejects post
+router.route("/:id/approve")
+  .patch(
+    verifyJWT,
+    adminApproveLostFound
+  );
 
 // ✅ Claim found item
-router.patch('/:id/claim', verifyJWT, claimLostFound);
+router.route("/:id/claim")
+  .patch(
+    verifyJWT,
+    claimLostFound
+  );
 
 export default router;

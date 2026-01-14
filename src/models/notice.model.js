@@ -23,7 +23,7 @@ const noticeSchema = new Schema(
     },
     category: { 
         type: String,
-        enum: ['event', 'holiday', 'exam']
+        enum: ['event', 'holiday', 'exam', 'notice']
     },
     date: {
         type: Date, 

@@ -107,6 +107,21 @@ const loginUser = asyncHandler(async (req, res) => {
         );
 });
 
+export const getCurrentUser = asyncHandler(async (req, res) => {
+  // ✅ req.user is set by verifyJWT middleware
+  const user = await User.findById(req.user._id)
+    .select('-password') // Exclude password
+    .populate('role', 'name'); // Optional role population
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  return res.status(200).json(
+    new ApiResponse(200, user, "User fetched successfully")
+  );
+});
+
 
 
 const logoutUser = asyncHandler( async (req,res)=>{
